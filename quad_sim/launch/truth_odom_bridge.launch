@@ -1,0 +1,18 @@
+<launch>
+    <arg name="input_topic" default="/sim/odom" />
+    <arg name="output_topic" default="/mavros/odometry/in" />
+    <arg name="vision_pose_topic" default="/mavros/vision_pose/pose" />
+    <arg name="enable_mavros_injection" default="false" />
+
+    <node pkg="quad_sim"
+          type="truth_odom_to_mavros.py"
+          name="truth_odom_to_mavros"
+          output="screen">
+        <param name="input_topic" value="$(arg input_topic)" />
+        <param name="output_topic" value="$(arg output_topic)" />
+        <param name="vision_pose_topic" value="$(arg vision_pose_topic)" />
+        <param name="enable_mavros_injection" value="$(arg enable_mavros_injection)" />
+        <param name="frame_id" value="map" />
+        <param name="child_frame_id" value="base_link" />
+    </node>
+</launch>

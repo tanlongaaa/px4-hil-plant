@@ -1,0 +1,61 @@
+loop_rate_hz: 250.0
+gps_rate_hz: 10.0
+state_rate_hz: 50.0
+enable_hil_state_quaternion: false
+heartbeat_rate_hz: 1.0
+ekf_warmup_sec: 3.0
+takeoff_throttle_threshold: 0.02
+ctrl_alpha: 0.85
+
+ros_debug:
+  enabled: false
+
+backend:
+  connection_url: "tcpin:0.0.0.0:4560"
+  source_system: 142
+  source_component: 1
+  target_system: 1
+  target_component: 1
+  actuator_input_type: "motor_outputs"
+  actuator_axis_signs: [-1.0, -1.0, -1.0, 1.0]
+  control_timeout_sec: 0.5
+  log_interval_sec: 1.0
+
+plant:
+  mass: 1.5
+  gravity: 9.81
+  Jx: 0.02
+  Jy: 0.02
+  Jz: 0.04
+  k_thrust: 9.1
+  k_tau_roll: 0.02
+  k_tau_pitch: 0.02
+  k_tau_yaw: 0.008
+  motor_roll_moment: 0.08
+  motor_pitch_moment: 0.08
+  motor_yaw_moment: 0.02
+  linear_damping: 4.0
+  angular_damping: 0.45
+  hover_throttle: 0.42
+  throttle_scale: 0.03
+  throttle_alpha: 0.97
+  idle_throttle_deadzone: 0.05
+  tau_scale_air: 1.0
+  tau_scale_ground: 0.0
+
+sensors:
+  origin:
+    lat_deg: 47.397742
+    lon_deg: 8.545594
+    alt_m: 488.0
+  pressure_msl_hpa: 1013.25
+  temperature_c: 20.0
+  gyro_dither_rad_s: 0.0005
+  mag_dither_gauss: 0.0001
+  pressure_dither_hpa: 0.02
+  mag_gauss_ned: [0.215, 0.0, 0.427]
+  # Keep plant yaw=0 (ENU east) aligned with MAVROS local ENU yaw=0.
+  mag_yaw_offset_rad: 0.0
+  eph_cm: 80
+  epv_cm: 120
+  satellites_visible: 12

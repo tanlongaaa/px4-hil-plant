@@ -1,0 +1,24 @@
+<launch>
+    <arg name="config" default="$(find quad_sim)/config/sim_default.yaml" />
+    <arg name="rviz" default="false" />
+
+    <node pkg="quad_sim"
+          type="backend_main.py"
+          name="quad_hil_backend"
+          output="screen"
+          args="--config $(arg config) --ros-debug" />
+
+    <group if="$(arg rviz)">
+        <param name="robot_description"
+               textfile="$(find quad_sim)/urdf/quadrotor.urdf" />
+
+        <node pkg="robot_state_publisher"
+              type="robot_state_publisher"
+              name="robot_state_publisher" />
+
+        <node pkg="rviz"
+              type="rviz"
+              name="rviz"
+              args="-d $(find quad_sim)/rviz/quad_sim.rviz" />
+    </group>
+</launch>

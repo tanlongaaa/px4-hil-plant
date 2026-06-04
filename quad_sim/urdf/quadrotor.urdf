@@ -1,0 +1,127 @@
+<?xml version="1.0"?>
+<robot name="quadrotor">
+
+  <!-- 机身主体 -->
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <box size="0.18 0.12 0.04"/>
+      </geometry>
+      <material name="body_gray">
+        <color rgba="0.35 0.35 0.35 1"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- X方向机臂 -->
+  <link name="arm_x">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 1.5708 0"/>
+      <geometry>
+        <cylinder length="0.5" radius="0.012"/>
+      </geometry>
+      <material name="arm_red">
+        <color rgba="0.9 0.1 0.1 1"/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="joint_arm_x" type="fixed">
+    <parent link="base_link"/>
+    <child link="arm_x"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Y方向机臂 -->
+  <link name="arm_y">
+    <visual>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry>
+        <cylinder length="0.5" radius="0.012"/>
+      </geometry>
+      <material name="arm_blue">
+        <color rgba="0.1 0.3 0.9 1"/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="joint_arm_y" type="fixed">
+    <parent link="base_link"/>
+    <child link="arm_y"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- 4个旋翼 -->
+  <link name="rotor_front">
+    <visual>
+      <origin xyz="0.25 0 0.015" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="0.01" radius="0.05"/>
+      </geometry>
+      <material name="rotor_black">
+        <color rgba="0.05 0.05 0.05 1"/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="joint_rotor_front" type="fixed">
+    <parent link="base_link"/>
+    <child link="rotor_front"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="rotor_back">
+    <visual>
+      <origin xyz="-0.25 0 0.015" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="0.01" radius="0.05"/>
+      </geometry>
+      <material name="rotor_black2">
+        <color rgba="0.05 0.05 0.05 1"/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="joint_rotor_back" type="fixed">
+    <parent link="base_link"/>
+    <child link="rotor_back"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="rotor_left">
+    <visual>
+      <origin xyz="0 0.25 0.015" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="0.01" radius="0.05"/>
+      </geometry>
+      <material name="rotor_black3">
+        <color rgba="0.05 0.05 0.05 1"/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="joint_rotor_left" type="fixed">
+    <parent link="base_link"/>
+    <child link="rotor_left"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="rotor_right">
+    <visual>
+      <origin xyz="0 -0.25 0.015" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="0.01" radius="0.05"/>
+      </geometry>
+      <material name="rotor_black4">
+        <color rgba="0.05 0.05 0.05 1"/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="joint_rotor_right" type="fixed">
+    <parent link="base_link"/>
+    <child link="rotor_right"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+</robot>

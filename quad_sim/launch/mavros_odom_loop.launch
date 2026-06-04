@@ -1,0 +1,28 @@
+<launch>
+    <arg name="bridge_rate_hz" default="40.0" />
+    <arg name="mavros_odom_topic" default="/mavros/odometry/in" />
+    <arg name="monitor" default="false" />
+    <arg name="enable_mavros_odom" default="false" />
+
+    <node pkg="quad_sim"
+          type="sim_bridge_odom.py"
+          name="sim_bridge_odom"
+          output="screen">
+        <param name="rate_hz" value="$(arg bridge_rate_hz)" />
+        <param name="ekf_warmup_sec" value="3.0" />
+        <param name="control_timeout_sec" value="0.5" />
+        <param name="takeoff_throttle_threshold" value="0.02" />
+        <param name="mavros_odom_topic" value="$(arg mavros_odom_topic)" />
+        <param name="enable_mavros_odom" value="$(arg enable_mavros_odom)" />
+        <param name="odom_frame_id" value="map" />
+        <param name="base_frame_id" value="base_link" />
+        <param name="publish_tf" value="false" />
+        <rosparam param="actuator_axis_signs">[1.0, -1.0, -1.0, 1.0]</rosparam>
+    </node>
+
+    <node if="$(arg monitor)"
+          pkg="quad_sim"
+          type="flight_state_monitor.py"
+          name="flight_state_monitor"
+          output="screen" />
+</launch>

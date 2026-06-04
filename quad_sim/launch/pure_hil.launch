@@ -1,0 +1,22 @@
+<launch>
+    <arg name="config" default="$(find quad_sim)/config/sim_default.yaml" />
+    <arg name="rviz" default="false" />
+    <arg name="mavros" default="true" />
+    <arg name="monitor" default="false" />
+    <arg name="fcu_url" default="udp://127.0.0.1:14540@127.0.0.1:14560" />
+
+    <include file="$(find quad_sim)/launch/hil_backend.launch">
+        <arg name="config" value="$(arg config)" />
+        <arg name="rviz" value="$(arg rviz)" />
+    </include>
+
+    <include if="$(arg mavros)" file="$(find mavros)/launch/px4.launch">
+        <arg name="fcu_url" value="$(arg fcu_url)" />
+    </include>
+
+    <node if="$(arg monitor)"
+          pkg="quad_sim"
+          type="flight_state_monitor.py"
+          name="flight_state_monitor"
+          output="screen" />
+</launch>

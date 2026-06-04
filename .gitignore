@@ -1,0 +1,22 @@
+# ROS / catkin
+build/
+devel/
+log/
+.catkin_tools/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Data / logs
+*.bag
+*.csv
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# System
+.DS_Store

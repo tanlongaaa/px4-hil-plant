@@ -1,0 +1,25 @@
+<launch>
+
+    <!-- 启动6DOF节点 -->
+    <node pkg="quad_sim"
+          type="drone_6dof_rviz_demo.py"
+          name="quad_6dof"
+          output="screen" />
+
+    <!-- 加载URDF -->
+    <param name="robot_description"
+           textfile="$(find quad_sim)/urdf/quadrotor.urdf" />
+
+    <!-- 发布TF（让模型跟着base_link） -->
+    <node pkg="robot_state_publisher"
+          type="robot_state_publisher"
+          name="robot_state_publisher" />
+     
+
+    <!-- RViz -->
+    <node pkg="rviz"
+          type="rviz"
+          name="rviz"
+          args="-d $(find quad_sim)/rviz/demo.rviz" />
+
+</launch>
