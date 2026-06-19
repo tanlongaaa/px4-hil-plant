@@ -6,6 +6,28 @@
 
 ---
 
+## 🚀 一键启动 (推荐)
+
+```bash
+# 进工程目录
+cd px4-hil-plant
+
+# 完整测试: 悬停 20s → 5m/s 阶跃风 30s → 恢复 45s
+bash quad_sim/scripts/start_hil_full.sh
+
+# 仅悬停 (不打风)
+bash quad_sim/scripts/start_hil_full.sh --no-wind
+
+# 自定义风速
+bash quad_sim/scripts/start_hil_full.sh --wind 7.0
+```
+
+**脚本自动完成：** source 环境 → Backend + RViz → PX4 SITL → MAVROS → 设 PX4 参数 → 起飞悬停 → 阶跃阵风注入 → 实时位置监控 → 自动清理
+
+> ⚠️ 前置: 需要先运行 `roscore`，且 PX4 在 `~/Desktop/px4rl/PX4-Autopilot`
+
+---
+
 ## 项目概述
 
 `px4-hil-plant` 是一个 **PX4 Hardware-in-the-Loop (HIL) 仿真框架**，核心是自建的 6-DOF 可编程物理引擎 `plant_6dof.py`，通过 MAVLink 与 PX4 飞控对接，替代 Gazebo 进行高速、可编程的物理仿真。
@@ -17,6 +39,7 @@
 | 通路 | 启动文件 | 物理引擎 | 用途 |
 |------|---------|---------|------|
 | **HIL** (推荐) | `hil_backend.launch` | plant_6dof | PX4 真飞控 + 可编程物理 |
+| **一键全链路** ⭐ | `start_hil_full.sh` | plant_6dof | 自动启动全链路 + 阶跃风测试 + RViz |
 | 备用 | `pure_hil.launch` | plant_6dof | 同上，含更多节点 |
 
 ---
@@ -32,10 +55,15 @@ px4-hil-plant/
 │   │   └── sim_default.yaml           # 全局参数 (plant + backend + sensors)
 │   │
 │   ├── scripts/
+│   │   ├── start_hil_full.sh          # ★★★ 一键全链路脚本 (推荐入口)
 │   │   ├── plant_6dof.py              # ★★★ 6-DOF 可编程物理引擎
 │   │   ├── backend_main.py            # HIL Backend 主循环 (MAVLink ↔ Plant)
 │   │   ├── mavlink_backend.py         # MAVLink HIL 接口 (TCP 4560)
 │   │   ├── sensor_models.py           # IMU / GPS / 气压计模型
+│   │   ├── pid_baseline.py            # PID 悬停控制 (from tcw-mpc)
+│   │   ├── step_wind.py               # 阶跃阵风注入脚本
+│   │   ├── power_model.py             # 统一功耗模型 (BEMT)
+│   │   ├── quadrotor_dynamics.py      # 6D/10D/13D 非线性动力学
 │   │   ├── sim_bridge_odom.py         # 备用通路 (Odom 直驱，不依赖 PX4)
 │   │   ├── drone_6dof_rviz_demo.py    # RViz 3D 可视化节点
 │   │   ├── flight_state_monitor.py    # 飞行状态监控
@@ -246,6 +274,8 @@ for i in range(450):
 
 ## 验证结果 (2026-06-19)
 
+### v9 全效应验证 (PX4 出厂 PID)
+
 | 测试 | 条件 | 结果 |
 |------|------|------|
 | 无风悬停 | v9 全效应, PX4 出厂 PID | err_xy ±6 mm |
@@ -254,6 +284,25 @@ for i in range(450):
 | Dynamic Inflow | inflow_tau=0.05 单独开 | err_xy ±5 mm |
 | 五效应全开 | flap+gyro+inflow+drag+CdA | err_xy ±10 mm |
 | 阶跃风 5 m/s | 全开, 风停后恢复 | 最大漂移 0.86 m, 15s 拉回 |
+
+### flapping 系数加倍测试 (flap: 5e-05 → 1e-04)
+
+| 测试 | 条件 | 结果 |
+|------|------|------|
+| 无风悬停 | flap=1e-04, PX4 出厂 PID | ❌ 6s 到达 2.5m → 9s 振荡 → 24s 发散坠毁 |
+| 根因 | blade flapping 力矩过大 | 角速率扰动>PX4 PID 补偿能力 → 振幅递增发散 |
+
+> **结论: flap=5e-05 是经验验证最优值。翻倍会导致无风不稳定。**
+
+### HIL vs Gazebo SITL 阶跃风对照 (flap=5e-05)
+
+| 指标 | HIL Plant v9 | Gazebo SITL |
+|------|-------------|-------------|
+| 无风 err_xy | ±6 mm | ±30-60 mm |
+| 5 m/s 最大漂移 | 0.86 m | 0.36 m |
+| 恢复后精度 | ±5 mm | ±20-40 mm |
+
+> Gazebo 抗风更强（旋翼阻力在 rotor link 产生稳定力矩），HIL 无风更精准（无多体耦合杂散扰动）。
 
 ---
 
@@ -270,6 +319,15 @@ for i in range(450):
 原始版本 wind 同时从三条路径影响动力学（线性阻尼含风 + 外力风 + 转子风），导致 3-6 倍超量风阻。
 
 **修复:** 风统一从 `set_wind_vel_enu` 进入，线性阻尼只用 v_body，`set_ext_force_enu` 单独计算二次方风阻。
+
+### use_sim_time 陷阱
+
+HIL 模式**不使用 Gazebo**，没有 `/clock` 发布者。如果 `use_sim_time=true`（Gazebo SITL 会话残留），所有 ROS 消息的 timestamp 将无法前进，导致 odometry/tf 消息全部被丢弃，无人机无法起飞。
+
+**检查:** `rosparam get /use_sim_time` 必须是 `false`。
+**修复:** `rosparam set /use_sim_time false`
+
+> `start_hil_full.sh` 脚本会自动检查并修复此参数。
 
 ---
 
