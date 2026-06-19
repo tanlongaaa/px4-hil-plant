@@ -15,6 +15,9 @@ cd px4-hil-plant
 # 完整测试: 悬停 20s → 5m/s 阶跃风 30s → 恢复 45s
 bash quad_sim/scripts/start_hil_full.sh
 
+# 指定 PX4 路径 (如果不在标准位置)
+bash quad_sim/scripts/start_hil_full.sh --px4-path /path/to/PX4-Autopilot
+
 # 仅悬停 (不打风)
 bash quad_sim/scripts/start_hil_full.sh --no-wind
 
@@ -24,7 +27,7 @@ bash quad_sim/scripts/start_hil_full.sh --wind 7.0
 
 **脚本自动完成：** source 环境 → Backend + RViz → PX4 SITL → MAVROS → 设 PX4 参数 → 起飞悬停 → 阶跃阵风注入 → 实时位置监控 → 自动清理
 
-> ⚠️ 前置: 需要先运行 `roscore`，且 PX4 在 `~/Desktop/px4rl/PX4-Autopilot`
+> ⚠️ 前置: 需要先运行 `roscore`。PX4 路径通过 `--px4-path`、`$PX4_DIR` 环境变量、或自动探测指定。
 
 ---
 
@@ -176,11 +179,13 @@ roslaunch quad_sim hil_backend.launch rviz:=true
 ### Step 3: PX4 SITL（无 Gazebo 守护进程模式）
 
 ```bash
-cd ~/Desktop/px4rl/PX4-Autopilot
-NO_PXH=1 no_sim=1 make px4_sitl none_iris
+# 替换为实际 PX4-Autopilot 目录
+cd /path/to/PX4-Autopilot
+PX4_SIM_HOST_ADDR=127.0.0.1 NO_PXH=1 no_sim=1 make px4_sitl none_iris
 ```
 
-> ⚠️ 必须是这个 PX4 路径 (v1.13.3)。`NO_PXH=1` 是守护进程模式，`no_sim=1` 跳过 Gazebo。
+> ⚠️ 需要 PX4 v1.13+。`NO_PXH=1` 守护进程模式，`no_sim=1` 跳过 Gazebo。
+> 一键脚本自动探测 PX4 路径，详见 `bash start_hil_full.sh --help`。
 
 ### Step 4: MAVROS
 
