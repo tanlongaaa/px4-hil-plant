@@ -50,17 +50,42 @@ class RosDebugPublisher:
         from nav_msgs.msg import Odometry
         from sensor_msgs.msg import Imu
         from mavros_msgs.msg import ActuatorControl
+        from geometry_msgs.msg import Vector3Stamped
 
         self.rospy = rospy
         self.Odometry = Odometry
         self.Imu = Imu
         self.ActuatorControl = ActuatorControl
+        self.Vector3Stamped = Vector3Stamped
         self.tf_br = tf.TransformBroadcaster()
 
         rospy.init_node("quad_hil_backend", anonymous=False, disable_signals=True)
         self.odom_pub = rospy.Publisher("/sim/odom", Odometry, queue_size=20)
         self.imu_pub = rospy.Publisher("/sim/imu", Imu, queue_size=20)
         self.control_pub = rospy.Publisher("/sim/hil_actuator_controls", ActuatorControl, queue_size=20)
+
+        # Wind field subscriber
+        self._wind_vel = np.zeros(3)
+        self._wind_stamp = 0.0
+        rospy.Subscriber('/wind_field/velocity', Vector3Stamped, self._wind_cb)
+
+    def _wind_cb(self, msg):
+        self._wind_vel[0] = msg.vector.x
+        self._wind_vel[1] = msg.vector.y
+        self._wind_vel[2] = msg.vector.z
+        self._wind_stamp = self.rospy.Time.now().to_sec()
+
+    def wind_fresh(self):
+        """True if wind data arrived within last 0.5s."""
+        return (self.rospy.Time.now().to_sec() - self._wind_stamp) < 0.5
+
+    def get_wind_drag_force(self, plant):
+        """Body quadratic aerodynamic drag: F = 0.5·ρ·CdA·|Vrel|·Vrel"""
+        Vrel = self._wind_vel - plant.v_enu
+        speed = float(np.linalg.norm(Vrel))
+        if speed < 1e-6:
+            return np.zeros(3)
+        return 0.5 * plant.rho_air * plant.body_CdA * speed * Vrel
 
     def is_shutdown(self):
         return self.rospy.is_shutdown()
@@ -246,6 +271,16 @@ def main():
                     plant.set_motor_outputs(ctrl_filt)
                 else:
                     plant.set_actuator_controls(ctrl_filt)
+
+                # ── Wind injection (two-path: rotor-level + body-level) ──
+                wind_ok = ros_pub is not None and ros_pub.wind_fresh()
+                if wind_ok:
+                    plant.set_wind_vel_enu(ros_pub._wind_vel)
+                    plant.set_ext_force_enu(ros_pub.get_wind_drag_force(plant))
+                else:
+                    plant.set_wind_vel_enu(np.zeros(3))
+                    plant.set_ext_force_enu(np.zeros(3))
+
                 plant.step(dt)
 
         backend.send_hil_sensor(sensors.hil_sensor(plant))

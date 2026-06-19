@@ -7,7 +7,6 @@ Panels:
         - /Global Options1
         - /Status1
         - /Odometry1
-        - /Odometry1/Status1
         - /RobotModel1
         - /RobotModel1/Links1
       Splitter Ratio: 0.5
@@ -121,8 +120,6 @@ Visualization Manager:
           Value: true
         rotor_right:
           Value: true
-        world:
-          Value: true
       Marker Alpha: 1
       Marker Scale: 1
       Name: TF
@@ -131,12 +128,6 @@ Visualization Manager:
       Show Names: true
       Tree:
         map:
-          map_ned:
-            {}
-        odom:
-          odom_ned:
-            {}
-        world:
           base_link:
             arm_x:
               {}
@@ -152,6 +143,11 @@ Visualization Manager:
               {}
             rotor_right:
               {}
+          map_ned:
+            {}
+        odom:
+          odom_ned:
+            {}
       Update Interval: 0
       Value: true
     - Alpha: 1
@@ -242,7 +238,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 9.26300048828125
+      Distance: 3.5756115913391113
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -250,17 +246,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 0
-        Y: 0
-        Z: 0
+        X: -0.3174346089363098
+        Y: -0.2592085897922516
+        Z: 0.2585323452949524
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.7853981852531433
+      Pitch: 0.0953986868262291
       Target Frame: base_link
-      Yaw: 0.7853981852531433
+      Yaw: 3.9354231357574463
     Saved: ~
 Window Geometry:
   Displays:
@@ -278,5 +274,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1200
-  X: 497
-  Y: 134
+  X: 173
+  Y: 117

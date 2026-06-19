@@ -22,26 +22,60 @@ backend:
   log_interval_sec: 1.0
 
 plant:
+  # ── Rigid body — iris.sdf ──
   mass: 1.5
   gravity: 9.81
-  Jx: 0.02
-  Jy: 0.02
-  Jz: 0.04
-  k_thrust: 9.1
+  Jx: 0.029125
+  Jy: 0.029125
+  Jz: 0.055225
+
+  # ── Active control (du-based mixer) ──
+  k_thrust: 7.36
+  hover_throttle: 0.50
+  motor_roll_moment: 1.30
+  motor_pitch_moment: 1.30
+  motor_yaw_moment: 0.12
+  tau_scale_air: 1.0
+  tau_scale_ground: 0.0
+
+  # ── Linear body drag (v9) ──
+  # base_linear_drag = bulk isotropic from Iris calibration
+  # body_drag_x/y = anisotropic correction ON TOP (v9: lateral > frontal)
+  base_linear_drag: 3.5
+  body_drag_x: 0.10
+  body_drag_y: 0.30
+  body_drag_z: 0.1
+
+  # ── Rotor lateral drag (Martin & Salaün 2010) ──
+  rotor_drag_coefficient: 0.000175
+  omega_hover: 800.0
+  omega_scale: 0.5
+
+  # ── Blade flapping (v9 — wind-vane effect) ──
+  flapping_coefficient: 5e-05
+
+  # ── Rotor gyroscopic (v9) ──
+  I_rotor: 4e-05
+
+  # ── Dynamic inflow — Pitt-Peters (v9) ──
+  inflow_tau: 0.05
+
+  # ── Body quadratic drag (v9, used by backend) ──
+  body_CdA: 0.12
+  rho: 1.225
+
+  # ── Angular damping ──
+  angular_damping: 0.3
+
+  # ── Limits ──
+  max_tilt_rad: 0.8
+  ground_attitude_damping: 0.98
+
+  # ── Legacy ──
   k_tau_roll: 0.02
   k_tau_pitch: 0.02
   k_tau_yaw: 0.008
-  motor_roll_moment: 0.08
-  motor_pitch_moment: 0.08
-  motor_yaw_moment: 0.02
-  linear_damping: 4.0
-  angular_damping: 0.45
-  hover_throttle: 0.42
-  throttle_scale: 0.03
-  throttle_alpha: 0.97
   idle_throttle_deadzone: 0.05
-  tau_scale_air: 1.0
-  tau_scale_ground: 0.0
 
 sensors:
   origin:
@@ -54,7 +88,6 @@ sensors:
   mag_dither_gauss: 0.0001
   pressure_dither_hpa: 0.02
   mag_gauss_ned: [0.215, 0.0, 0.427]
-  # Keep plant yaw=0 (ENU east) aligned with MAVROS local ENU yaw=0.
   mag_yaw_offset_rad: 0.0
   eph_cm: 80
   epv_cm: 120
