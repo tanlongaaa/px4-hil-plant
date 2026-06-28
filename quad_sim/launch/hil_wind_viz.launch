@@ -1,0 +1,83 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- hil_wind_viz.launch — HIL 风场集成启动文件                   -->
+  <!--                                                              -->
+  <!-- 组件:                                                        -->
+  <!--   1. wind_field.py      — 极端湍流风场 (Dryden + 均风 + 阵风) -->
+  <!--   2. backend_main.py    — HIL 后端 (plant_6dof + MAVLink)    -->
+  <!--   3. wind_visualizer.py — RViz 风场可视化                     -->
+  <!--   4. RViz               — 3D 可视化                           -->
+  <!--                                                              -->
+  <!-- 风场通路:                                                     -->
+  <!--   wind_field → /wind_field/velocity                          -->
+  <!--     → backend_main → plant.set_wind_vel_enu()                -->
+  <!--     → wind_visualizer → RViz Marker arrows                   -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <arg name="config" default="$(find quad_sim)/config/sim_default.yaml" />
+  <arg name="rviz" default="true" />
+  <arg name="rviz_config" default="$(find quad_sim)/rviz/quad_sim.rviz" />
+  <arg name="wind_rate" default="20" />
+  <arg name="wind_u_ref" default="5.0" />
+  <arg name="wind_seed" default="42" />
+  <arg name="wind_debug" default="false" />
+  <arg name="viz_rate" default="10" />
+  <arg name="viz_grid_size" default="5" />
+  <arg name="viz_grid_spacing" default="2.0" />
+  <arg name="viz_wind_dir" default="45" />
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- 1. Wind Field (no-wrench mode: 只发风场数据，不施加 Gazebo 力) -->
+  <!--    风场通过 backend_main 注入 plant_6dof                     -->
+  <!--    重映射 odom 到 /sim/odom (backend 提供)                   -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <node pkg="offboard_test"
+        type="wind_field.py"
+        name="wind_field_node"
+        output="screen"
+        args="--no-wrench --rate $(arg wind_rate) --u-ref $(arg wind_u_ref) --seed $(arg wind_seed)">
+    <remap from="/mavros/local_position/odom" to="/sim/odom" />
+  </node>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- 2. HIL Backend (plant_6dof + MAVLink + ROS debug)           -->
+  <!--    自动订阅 /wind_field/velocity 并注入 plant                -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <node pkg="quad_sim"
+        type="backend_main.py"
+        name="quad_hil_backend"
+        output="screen"
+        args="--config $(arg config) --ros-debug" />
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- 3. Wind Visualizer (RViz Marker 风场箭头 + 网格)            -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <node pkg="quad_sim"
+        type="wind_visualizer.py"
+        name="wind_visualizer"
+        output="screen"
+        args="--rate $(arg viz_rate)
+              --grid-size $(arg viz_grid_size)
+              --grid-spacing $(arg viz_grid_spacing)
+              --u-ref $(arg wind_u_ref)
+              --wind-dir $(arg viz_wind_dir)" />
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- 4. RViz                                                      -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <group if="$(arg rviz)">
+    <param name="robot_description"
+           textfile="$(find quad_sim)/urdf/quadrotor.urdf" />
+
+    <node pkg="robot_state_publisher"
+          type="robot_state_publisher"
+          name="robot_state_publisher" />
+
+    <node pkg="rviz"
+          type="rviz"
+          name="rviz"
+          args="-d $(arg rviz_config)" />
+  </group>
+
+</launch>

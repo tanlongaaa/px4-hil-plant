@@ -77,7 +77,19 @@ class Quad6DOFPlant:
 
         # ── Blade flapping (v9) ────────────────────────
         # τ_flap = -Σ|ω_i| · k_flap · v_rel_horizontal  (wind-vane effect)
-        self.flapping_coefficient = float(p.get("flapping_coefficient", 5e-05))
+        # NOTE (2026-06-28): default lowered 5e-5 → 1e-5. Real blade flapping has
+        # its own (rotor-revolution) time constant and CANNOT track 20Hz Dryden
+        # turbulence. The old value turned random wind into high-frequency torque
+        # noise (±40-55 rad/s² @ σ=4) that PX4's rate loop could not reject.
+        self.flapping_coefficient = float(p.get("flapping_coefficient", 1e-05))
+
+        # ── Wind low-pass (2026-06-28) ─────────────────
+        # Rotor-level effects (lateral drag + blade flapping) see only a
+        # quasi-steady wind. A first-order LPF strips the high-frequency
+        # turbulence that the physical rotor cannot follow. tau≈0.15s.
+        # Set wind_filter_tau<=0 to disable (raw wind, legacy behaviour).
+        self.wind_filter_tau = float(p.get("wind_filter_tau", 0.15))
+        self.wind_vel_filt_enu = np.zeros(3)
 
         # ── Rotor gyroscopic (v9) ──────────────────────
         # τ_gyro = I_rotor · Σ Ω_i · (e_z × ω_body)
@@ -127,6 +139,7 @@ class Quad6DOFPlant:
         self.control_mode = "actuator_controls"
         self.ext_force_enu[:] = 0.0
         self.wind_vel_enu[:]  = 0.0
+        self.wind_vel_filt_enu[:] = 0.0
         self.v_inflow = 0.0
         self.time_s = 0.0
 
@@ -148,8 +161,21 @@ class Quad6DOFPlant:
     def set_ext_force_enu(self, f):
         self.ext_force_enu[:] = np.asarray(f).ravel()[:3]
 
-    def set_wind_vel_enu(self, w):
+    def set_wind_vel_enu(self, w, dt=None):
+        """Set commanded wind (ENU). The rotor-level physics use a low-pass
+        filtered copy (wind_vel_filt_enu) so high-frequency turbulence is not
+        converted into unphysical torque noise. Pass dt for time-accurate
+        filtering; if omitted, a fixed alpha is used."""
         self.wind_vel_enu[:] = np.asarray(w).ravel()[:3]
+        tau = self.wind_filter_tau
+        if tau <= 0.0:
+            self.wind_vel_filt_enu[:] = self.wind_vel_enu
+            return
+        if dt is not None and dt > 0.0:
+            alpha = float(dt) / (tau + float(dt))
+        else:
+            alpha = 0.3
+        self.wind_vel_filt_enu += alpha * (self.wind_vel_enu - self.wind_vel_filt_enu)
 
     # ══════════════════════════════════════════════════════
     #  Active control
@@ -192,9 +218,11 @@ class Quad6DOFPlant:
     # ══════════════════════════════════════════════════════
 
     def _v_rel_body_flu(self):
-        """Relative velocity (body FLU): v_drone - v_wind"""
+        """Relative velocity (body FLU): v_drone - v_wind.
+        Uses the low-pass filtered wind so rotor-level effects (lateral drag,
+        blade flapping) only respond to quasi-steady wind, not turbulence."""
         R = rot_enu_from_flu(self.roll, self.pitch, self.yaw)
-        return R.T @ (self.v_enu - self.wind_vel_enu)
+        return R.T @ (self.v_enu - self.wind_vel_filt_enu)
 
     def _rotor_lateral_drag_flu(self, v_rel_body, omegas):
         """F_drag = -Σ|ω_i| · k_drag · v_perp  (Martin & Salaün 2010)"""

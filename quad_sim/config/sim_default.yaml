@@ -52,7 +52,14 @@ plant:
   omega_scale: 0.5
 
   # ── Blade flapping (v9 — wind-vane effect) ──
-  flapping_coefficient: 5e-05
+  # 2026-06-28: lowered 5e-5 → 1e-5 (real flapping cannot track 20Hz turbulence)
+  flapping_coefficient: 1e-05
+
+  # ── Wind low-pass filter (2026-06-28) ──
+  # rotor-level + body-level wind effects see only quasi-steady wind.
+  # tau≈0.15s strips high-freq Dryden turbulence the rotor cannot follow.
+  # set 0.0 to disable (raw wind, legacy behaviour)
+  wind_filter_tau: 0.15
 
   # ── Rotor gyroscopic (v9) ──
   I_rotor: 4e-05

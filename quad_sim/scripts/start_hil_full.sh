@@ -3,19 +3,26 @@
 # start_hil_full.sh — 六自由度无人机 HIL 全链路一键脚本
 # ==============================================================================
 # 用法:
-#   bash start_hil_full.sh              # 默认: 悬停 20s → 5m/s 阶跃风 30s → 恢复 45s
-#   bash start_hil_full.sh --no-wind    # 仅悬停, 不打风
-#   bash start_hil_full.sh --wind 7.0   # 自定义风速 (m/s, ENU +Y 即正北)
-#   bash start_hil_full.sh --px4-path /path/to/PX4-Autopilot  # 指定 PX4 源码路径
+#   bash start_hil_full.sh                     # 默认: 悬停 20s → 5m/s 阶跃风 30s → 恢复 45s
+#   bash start_hil_full.sh --no-wind           # 仅悬停, 不打风
+#   bash start_hil_full.sh --wind 7.0          # 自定义阶跃风速 (m/s, ENU +Y 即正北)
+#   bash start_hil_full.sh --turbulent         # 连续湍流风场 (Dryden + 幂律均风 + 阵风) + RViz风场可视化
+#   bash start_hil_full.sh --turbulent --wind-intensity 12.0 --wind-seed 123
+#   bash start_hil_full.sh --px4-path /path/to/PX4-Autopilot
 #
 # 环境变量:
 #   PX4_DIR   — PX4-Autopilot 源码目录 (优先级: 命令行 > 环境变量 > 自动探测)
 #   CATKIN_WS — catkin 工作空间 (默认 ~/catkin_ws)
 #
+# 风场模式:
+#   默认 (--wind N):    阶跃风, 15s基线 → N m/s 持续 → 恢复
+#   --turbulent:       连续湍流风 (wind_field.py), Dryden湍流+幂律均风+1-cos阵风
+#                       全程通过 RViz 可视化风场箭头+网格+历史轨迹
+#
 # 架构:
-#   Backend(plant_6dof) ──TCP──▶ PX4 SITL ──UDP──▶ MAVROS ──ROS──▶ pid_baseline
-#        ▲                                                             │
-#        └──────── /wind_field/velocity (阶跃风) ──────────────────────┘
+#   wind_field ──/wind_field/velocity──▶ Backend(plant_6dof) ──TCP──▶ PX4 SITL ──UDP──▶ MAVROS ──ROS──▶ pid_baseline
+#                                             │
+#                                        wind_visualizer ──/wind_viz/markers──▶ RViz
 #
 # 依赖:
 #   - ROS Noetic + catkin_ws
@@ -23,30 +30,53 @@
 #   - quad_sim (plant_6dof + backend_main + sensor_models)
 # ==============================================================================
 
-set -euo pipefail
+set -eo pipefail
+
+# 某些 ROS 环境脚本需要 ROS_DISTRO 变量
+ROS_DISTRO="${ROS_DISTRO:-noetic}"
 
 # ── 默认参数 ─────────────────────────────────────────────────────────────────
-WIND_SPEED=5.0        # 阶跃风速 (m/s, ENU +Y)
-HOVER_WARMUP=20       # 悬停稳定等待时间 (秒)
-WIND_DURATION=30      # 阶跃风持续时间 (秒)
-RECOVERY_DURATION=45  # 风停后恢复观察时间 (秒)
+WIND_SPEED=5.0              # 阶跃风速 (m/s, ENU +Y)
+TURBULENT=false             # 连续湍流风场模式
+WIND_INTENSITY=8.0          # 湍流模式: 10m 参考风速 (m/s)
+WIND_SEED=42                # 湍流模式: 随机种子 (可复现)
+WIND_SIGMA_SCALE=0.25       # 湍流强度缩放 (0.25=轻度验证, 1.0=极端论文工况)
+WIND_GUST_MAX=2.0           # 垂向阵风峰值 (m/s, 极端可设 8.0)
+WIND_EXTREME=false          # 极端档: sigma_scale=1.0 + gust=8.0
+HOVER_WARMUP=20             # 悬停稳定等待时间 (秒)
+WIND_DURATION=30            # 阶跃风持续时间 (秒)
+RECOVERY_DURATION=45        # 风停后恢复观察时间 (秒)
 NO_WIND=false
-PX4_DIR_USER=""       # 用户通过 --px4-path 指定的路径
-CATKIN_WS_USER=""     # 用户通过 --catkin-ws 指定的路径
+PX4_DIR_USER=""              # 用户通过 --px4-path 指定的路径
+CATKIN_WS_USER=""            # 用户通过 --catkin-ws 指定的路径
 
 # ── 解析命令行 ───────────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --no-wind) NO_WIND=true; shift ;;
         --wind) WIND_SPEED="$2"; shift 2 ;;
+        --turbulent) TURBULENT=true; shift ;;
+        --wind-intensity) WIND_INTENSITY="$2"; shift 2 ;;
+        --wind-seed) WIND_SEED="$2"; shift 2 ;;
+        --wind-sigma) WIND_SIGMA_SCALE="$2"; shift 2 ;;
+        --wind-gust) WIND_GUST_MAX="$2"; shift 2 ;;
+        --extreme) WIND_EXTREME=true; shift ;;
         --px4-path) PX4_DIR_USER="$2"; shift 2 ;;
         --catkin-ws) CATKIN_WS_USER="$2"; shift 2 ;;
         -h|--help)
             echo "用法: bash start_hil_full.sh [选项]"
             echo ""
-            echo "选项:"
-            echo "  --no-wind              仅悬停, 不注入阶跃风"
-            echo "  --wind SPEED           自定义风速 (默认 5.0 m/s)"
+            echo "风场选项:"
+            echo "  --no-wind              仅悬停, 不注入任何风"
+            echo "  --wind SPEED           阶跃风 (默认 5.0 m/s, +Y 正北)"
+            echo "  --turbulent            连续湍流风场 (Dryden + 幂律均风 + 1-cos 阵风)"
+            echo "  --wind-intensity SPEED 湍流模式参考风速 (默认 8.0 m/s @10m)"
+            echo "  --wind-seed SEED       湍流模式随机种子 (默认 42, 可复现)"
+            echo "  --wind-sigma SCALE     湍流强度缩放 (默认 0.25=轻度; 1.0=极端)"
+            echo "  --wind-gust MAX        垂向阵风峰值 m/s (默认 2.0; 极端 8.0)"
+            echo "  --extreme              极端档快捷: sigma=1.0 + gust=8.0 (论文工况)"
+            echo ""
+            echo "路径选项:"
             echo "  --px4-path PATH        PX4-Autopilot 源码路径"
             echo "  --catkin-ws PATH       Catkin 工作空间 (默认 ~/catkin_ws)"
             echo "  -h, --help             显示此帮助"
@@ -61,9 +91,26 @@ while [[ $# -gt 0 ]]; do
             echo "  4. ~/src/PX4-Autopilot"
             exit 0
             ;;
-        *) echo "未知参数: $1"; echo "用法: bash start_hil_full.sh [-h] [--no-wind] [--wind SPEED] [--px4-path PATH]"; exit 1 ;;
+        *) echo "未知参数: $1"; echo "用法: bash start_hil_full.sh [-h] [--no-wind] [--wind SPEED] [--turbulent]"; exit 1 ;;
     esac
 done
+
+# 冲突检查
+if $TURBULENT && [[ "$WIND_SPEED" != "5.0" ]]; then
+    warn "--turbulent 与 --wind 冲突, 使用 --turbulent --wind-intensity $WIND_INTENSITY"
+fi
+if $TURBULENT && $NO_WIND; then
+    warn "--turbulent 与 --no-wind 冲突, 使用 --turbulent"
+    NO_WIND=false
+fi
+
+# 极端档覆盖
+WIND_EXTREME_FLAG=""
+if $WIND_EXTREME; then
+    WIND_SIGMA_SCALE=1.0
+    WIND_GUST_MAX=8.0
+    WIND_EXTREME_FLAG="--extreme"
+fi
 
 # ── 路径 ─────────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -127,20 +174,24 @@ step()  {
 }
 
 # ── 全局 PID ─────────────────────────────────────────────────────────────────
-BACKEND_PID=""; PX4_PID=""; MAVROS_PID=""; PIDCTL_PID=""; WIND_PID=""
+BACKEND_PID=""; PX4_PID=""; MAVROS_PID=""; PIDCTL_PID=""; WIND_PID=""; VIZ_PID=""
 
 # ── 清理函数 ─────────────────────────────────────────────────────────────────
 cleanup() {
     echo ""
     warn "正在清理所有进程..."
-    for pid in $WIND_PID $PIDCTL_PID $MAVROS_PID $PX4_PID $BACKEND_PID; do
+    for pid in $VIZ_PID $WIND_PID $PIDCTL_PID $MAVROS_PID $PX4_PID $BACKEND_PID; do
         if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
             kill "$pid" 2>/dev/null || true
         fi
     done
+    pkill -f "wind_visualizer" 2>/dev/null || true
+    pkill -f "wind_field" 2>/dev/null || true
+    pkill -f "wind_field_node" 2>/dev/null || true
     pkill -f "step_wind_hil" 2>/dev/null || true
     pkill -f "pid_baseline" 2>/dev/null || true
     pkill -f "mavros_node" 2>/dev/null || true
+    pkill -f "backend_main" 2>/dev/null || true
     sleep 1
     info "清理完成"
 }
@@ -164,17 +215,21 @@ get_state() {
 echo ""
 echo -e "${BLUE}╔══════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║    六自由度无人机 HIL 全链路一键脚本                      ║${NC}"
-echo -e "${BLUE}║    Backend → PX4 SITL → MAVROS → PID 悬停 + 阶跃阵风     ║${NC}"
+echo -e "${BLUE}║    Backend → PX4 SITL → MAVROS → PID + 风场 + RViz       ║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════════════════════════╝${NC}"
 echo ""
 info "项目路径:  $PROJECT_DIR"
 info "PX4 路径:  $PX4_DIR  (来源: $PX4_SOURCE)"
-if $NO_WIND; then
-    info "阶跃风:    关闭 (纯悬停)"
+if $TURBULENT; then
+    info "风场模式:  连续湍流 (Dryden ${WIND_INTENSITY} m/s + 幂律均风 + 1-cos 阵风)"
+    info "随机种子:  ${WIND_SEED}"
+elif $NO_WIND; then
+    info "风场模式:  关闭 (纯悬停)"
 else
-    info "阶跃风:    ${WIND_SPEED} m/s +Y (正北), ${WIND_DURATION}s"
+    info "风场模式:  阶跃风 ${WIND_SPEED} m/s +Y (正北), ${WIND_DURATION}s"
 fi
 info "悬停热身:  ${HOVER_WARMUP}s"
+info "RViz 可视化: ✅ (无人机模型 + 风场箭头 + 网格 + 历史轨迹)"
 echo ""
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -243,13 +298,23 @@ sleep 1
 info "环境准备完成 ✓"
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Step 2: 启动 HIL Backend + RViz
+# Step 2: 启动 HIL Backend + 风场 + RViz
 # ══════════════════════════════════════════════════════════════════════════════
-step "Step 2/8  启动 HIL Backend (plant_6dof) + RViz"
+if $TURBULENT; then
+    step "Step 2/8  启动 HIL Backend + RViz (风场将在悬停稳定后启动)"
 
-roslaunch quad_sim hil_backend.launch rviz:=true &
-BACKEND_PID=$!
-info "Backend PID=$BACKEND_PID"
+    # 注意: 湍流模式下, wind_field/wind_visualizer 在 Step 8 才启动
+    # 否则风在无人机起飞前就开始吹, 导致 PX4 lockdown
+    roslaunch quad_sim hil_backend.launch rviz:=true &
+    BACKEND_PID=$!
+    info "Backend + RViz PID=$BACKEND_PID"
+else
+    step "Step 2/8  启动 HIL Backend (plant_6dof) + RViz"
+
+    roslaunch quad_sim hil_backend.launch rviz:=true &
+    BACKEND_PID=$!
+    info "Backend PID=$BACKEND_PID"
+fi
 
 # 等 4560 端口
 for i in $(seq 1 20); do
@@ -314,12 +379,15 @@ declare -A PARAMS=(
     ["SYS_HITL"]="int:1"
     ["MPC_XY_P"]="real:0.95"
     ["MPC_XY_VEL_P_ACC"]="real:1.8"
-    ["MPC_XY_VEL_I_ACC"]="real:0.4"
+    ["MPC_XY_VEL_I_ACC"]="real:1.2"
     ["MPC_XY_VEL_D_ACC"]="real:0.2"
     ["MPC_Z_VEL_P_ACC"]="real:4.0"
     ["MPC_Z_VEL_I_ACC"]="real:2.0"
     ["MPC_TILTMAX_AIR"]="real:45.0"
 )
+# 2026-06-28 调参: MPC_XY_VEL_I_ACC 出厂 0.4 → 1.2 (抑风核心)
+#   恒风 5m/s: exy_rms 0.545 → 0.079m;  湍流: 0.192 → 0.079m;  无风悬停 9mm
+#   选 1.2 而非 1.6 (几同精度但更大稳定裕度/抗积分饱和)
 
 for param_id in "${!PARAMS[@]}"; do
     val_spec="${PARAMS[$param_id]}"
@@ -373,14 +441,64 @@ read -r fx fy fz <<< "$(get_pose)"
 info "悬停滞稳完成 ✓ | 最终=(${fx:-?}, ${fy:-?}, ${fz:-?})"
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Step 8: 阶跃阵风 / 纯悬停
+# Step 8: 风场测试 / 纯悬停
 # ══════════════════════════════════════════════════════════════════════════════
 if $NO_WIND; then
     step "Step 8/8  纯悬停 — 按 Ctrl+C 停止"
 
-    info "无人机在 (0,0,2.5) 悬停中, RViz 可观察六自由度姿态"
+    info "无人机在 (0,0,2.5) 悬停中"
+    info "RViz: 无人机模型 (RobotModel) + Odometry + TF 可见"
     info "按 Ctrl+C 停止所有进程"
     while true; do sleep 5; done
+
+elif $TURBULENT; then
+    step "Step 8/8  启动风场 + 风场可视化 + 连续湍流测试"
+
+    echo ""
+    info "🌪️  风场配置:"
+    info "  风源:       wind_field.py (连续运行, Dryden + 幂律均风 + 1-cos 阵风)"
+    info "  参考风速:   ${WIND_INTENSITY} m/s @10m (幂律剖面 α=0.35)"
+    info "  风向:       45° (东北风 → 吹向西南)"
+    info "  湍流:       Dryden σ_u,v=4.0×${WIND_SIGMA_SCALE}, σ_w=2.5×${WIND_SIGMA_SCALE} m/s"
+    info "  阵风:       1-cos 垂向 ±${WIND_GUST_MAX} m/s, 间隔 ~20s"
+    info "  注入路径:   /wind_field/velocity → plant_6dof (转子侧向阻力 + 叶片挥舞)"
+    info "  RViz 可视化: 风矢量箭头 + 5×5 网格 + 历史彩色轨迹 + 风速标签"
+    echo ""
+
+    info "🚀 启动 wind_field.py (无风基线 10s 后开始湍流)..."
+
+    # 启动 wind_field (no-wrench, 只发风场数据)
+    # 需要 remap odom 来自 backend 发布的 /sim/odom
+    rosrun offboard_test wind_field.py \
+        --no-wrench --rate 20 --u-ref ${WIND_INTENSITY} --seed ${WIND_SEED} \
+        --sigma-scale ${WIND_SIGMA_SCALE} --gust-w-max ${WIND_GUST_MAX} \
+        ${WIND_EXTREME_FLAG} \
+        /mavros/local_position/odom:=/sim/odom &
+    WIND_PID=$!
+    sleep 2
+
+    # 启动 wind_visualizer (RViz 风场可视化)
+    rosrun quad_sim wind_visualizer.py \
+        --rate 10 --grid-size 5 --grid-spacing 2.0 \
+        --u-ref ${WIND_INTENSITY} --wind-dir 45 &
+    VIZ_PID=$!
+    sleep 2
+
+    info "🌪️  连续湍流测试中 (wind_field.py PID=$WIND_PID, viz PID=$VIZ_PID)"
+    info "按 Ctrl+C 停止所有进程"
+    echo ""
+
+    # 实时监控位置 + 风况 (每 5s 打印一次)
+    while true; do
+        sleep 5
+        read -r px py pz <<< "$(get_pose)"
+        # 取最近的风速值
+        wind_now=$(rostopic echo /wind_field/velocity -n1 2>/dev/null \
+            | grep -E '^[[:space:]]+[xyz]:' \
+            | awk '{printf "%.1f", sqrt($2^2+$4^2+$6^2)}' 2>/dev/null || echo "?")
+        echo -e "  ${YELLOW}[🌪️  连续湍流 ${WIND_INTENSITY}m/s]${NC} |w|=${wind_now}  pos=(${px:-?}, ${py:-?}, ${pz:-?})"
+    done
+
 else
     step "Step 8/8  阶跃阵风: ${WIND_SPEED} m/s +Y (正北)"
 

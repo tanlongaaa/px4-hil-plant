@@ -13,7 +13,9 @@ find_package(catkin REQUIRED COMPONENTS
   nav_msgs
   rospy
   sensor_msgs
+  std_msgs
   tf
+  visualization_msgs
 )
 
 ## System dependencies are found with CMake's conventions
@@ -165,6 +167,11 @@ include_directories(
 catkin_install_python(PROGRAMS
   scripts/backend_main.py
   scripts/drone_6dof_rviz_demo.py
+  scripts/fake_odom.py
+  scripts/wind_visualizer.py
+  scripts/wind_field.py
+  scripts/wind_tune.py
+  scripts/wind_ab.py
   scripts/flight_state_monitor.py
   scripts/mavlink_backend.py
   scripts/plant_6dof.py

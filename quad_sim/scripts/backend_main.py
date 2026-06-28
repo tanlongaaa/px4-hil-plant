@@ -80,8 +80,12 @@ class RosDebugPublisher:
         return (self.rospy.Time.now().to_sec() - self._wind_stamp) < 0.5
 
     def get_wind_drag_force(self, plant):
-        """Body quadratic aerodynamic drag: F = 0.5·ρ·CdA·|Vrel|·Vrel"""
-        Vrel = self._wind_vel - plant.v_enu
+        """Body quadratic aerodynamic drag: F = 0.5·ρ·CdA·|Vrel|·Vrel.
+        Uses the plant's low-pass filtered wind (single wind source) so the
+        body-level drag and the rotor-level effects respond to the same
+        quasi-steady wind. Call AFTER plant.set_wind_vel_enu()."""
+        wind = plant.wind_vel_filt_enu
+        Vrel = wind - plant.v_enu
         speed = float(np.linalg.norm(Vrel))
         if speed < 1e-6:
             return np.zeros(3)
@@ -273,12 +277,14 @@ def main():
                     plant.set_actuator_controls(ctrl_filt)
 
                 # ── Wind injection (two-path: rotor-level + body-level) ──
+                # set_wind_vel_enu runs the LPF (needs dt); get_wind_drag_force
+                # then reads the filtered wind → single coherent wind source.
                 wind_ok = ros_pub is not None and ros_pub.wind_fresh()
                 if wind_ok:
-                    plant.set_wind_vel_enu(ros_pub._wind_vel)
+                    plant.set_wind_vel_enu(ros_pub._wind_vel, dt)
                     plant.set_ext_force_enu(ros_pub.get_wind_drag_force(plant))
                 else:
-                    plant.set_wind_vel_enu(np.zeros(3))
+                    plant.set_wind_vel_enu(np.zeros(3), dt)
                     plant.set_ext_force_enu(np.zeros(3))
 
                 plant.step(dt)

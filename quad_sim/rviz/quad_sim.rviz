@@ -9,6 +9,7 @@ Panels:
         - /Odometry1
         - /RobotModel1
         - /RobotModel1/Links1
+        - /WindField1
       Splitter Ratio: 0.5
     Tree Height: 526
   - Class: rviz/Selection
@@ -210,6 +211,21 @@ Visualization Manager:
       Update Interval: 0
       Value: true
       Visual Enabled: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /wind_viz/markers
+      Name: WindField
+      Namespaces:
+        wind_components: true
+        wind_drone_arrow: true
+        wind_grid: true
+        wind_grid_info: true
+        wind_legend: true
+        wind_text: true
+        wind_trail: true
+        wind_trail_dots: true
+      Queue Size: 100
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -238,7 +254,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 3.5756115913391113
+      Distance: 1.248162031173706
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -246,17 +262,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: -0.3174346089363098
-        Y: -0.2592085897922516
-        Z: 0.2585323452949524
+        X: -0.299778014421463
+        Y: 0.05324209854006767
+        Z: 0.30695751309394836
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.0953986868262291
+      Pitch: 0.8497968912124634
       Target Frame: base_link
-      Yaw: 3.9354231357574463
+      Yaw: 2.220398426055908
     Saved: ~
 Window Geometry:
   Displays:
@@ -274,5 +290,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1200
-  X: 173
-  Y: 117
+  X: 1080
+  Y: 217

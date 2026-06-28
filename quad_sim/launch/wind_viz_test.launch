@@ -1,0 +1,56 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- wind_viz_test.launch — 独立风场可视化测试 (无需 PX4)        -->
+  <!--                                                              -->
+  <!-- 组件:                                                        -->
+  <!--   1. fake_odom.py        — 模拟航迹 (8字形)                  -->
+  <!--   2. wind_field.py       — Dryden 湍流风场                    -->
+  <!--   3. wind_visualizer.py  — RViz 风场箭头 + 网格              -->
+  <!--   4. RViz                — 3D 可视化                         -->
+  <!--                                                              -->
+  <!-- 启动: roslaunch quad_sim wind_viz_test.launch                -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <arg name="rviz_config" default="$(find quad_sim)/rviz/quad_sim.rviz" />
+  <arg name="wind_rate" default="20" />
+  <arg name="wind_u_ref" default="5.0" />
+  <arg name="wind_seed" default="42" />
+  <arg name="viz_rate" default="10" />
+  <arg name="viz_grid_size" default="5" />
+  <arg name="viz_grid_spacing" default="2.0" />
+  <arg name="viz_wind_dir" default="45" />
+
+  <!-- 1. Fake odometry (8字航迹) -->
+  <node pkg="quad_sim"
+        type="fake_odom.py"
+        name="fake_odom"
+        output="screen" />
+
+  <!-- 2. Wind Field -->
+  <node pkg="offboard_test"
+        type="wind_field.py"
+        name="wind_field_node"
+        output="screen"
+        args="--no-wrench --rate $(arg wind_rate) --u-ref $(arg wind_u_ref) --seed $(arg wind_seed)">
+    <remap from="/mavros/local_position/odom" to="/sim/odom" />
+  </node>
+
+  <!-- 3. Wind Visualizer -->
+  <node pkg="quad_sim"
+        type="wind_visualizer.py"
+        name="wind_visualizer"
+        output="screen"
+        args="--rate $(arg viz_rate)
+              --grid-size $(arg viz_grid_size)
+              --grid-spacing $(arg viz_grid_spacing)
+              --u-ref $(arg wind_u_ref)
+              --wind-dir $(arg viz_wind_dir)" />
+
+  <!-- 4. RViz -->
+  <node pkg="rviz"
+        type="rviz"
+        name="rviz"
+        args="-d $(arg rviz_config)" />
+
+</launch>
